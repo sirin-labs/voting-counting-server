@@ -53,7 +53,11 @@ async function calcResult(web3) {
             votersWithBalance = calcPercentOfBalance(votersWithBalance, totalBalanceSum);
             console.log(votersWithBalance);
             console.log("====count yes and save in var====")
-            let res = votersWithBalance.filter(vote => vote.vote == 1).map(vote => vote.strength).reduce((a, b) => a + b)
+            let res = votersWithBalance.filter(vote => vote.vote == 1)
+            // create array with only address strength param
+            .map(vote => vote.strength)
+            //sum
+            .reduce((a, b) => a + b)
             storage.saveResult(formatResult(res))
             resolve()
         } else {
