@@ -7,19 +7,17 @@ const votingContractAbi = require('./abi/votingContractAbi.json')
 const srnAbiJson = require('./abi/srnAbi.json')
 
 // CONSTS
-const UNIQUE_KEY = "address"
-const infuraBaseAddress = 'wss://kovan.infura.io/ws/v3/'
-const contractAddress = '0xa8D76bDbcA8f9258dC1bc51dE5DFedC7578c5A56'
-const srnContractAddress = '0xba84e54676abdc25dcb33c7b0e1f25fb38d47508'
-const infuraKey = '632d65efbe704a61b3a04b85fb921298'
+const infuraBaseAddress = process.env.ETH_NODE_ADDRESS
+const contractAddress = process.env.VOTING_CONTRACT
+const srnContractAddress = process.env.COIN_CONTRACT
+const nodeKEy = process.env.NODE_KEY
 const voteYesEventName = 'votedYesEvent'
 const voteNoEventName = 'votedNoEvent'
 const startBlock = 0
 const TO_GWEI_FACTOR = 1000000000000000000
+const UNIQUE_KEY = "address"
 
-const web3 = new Web3(new Web3.providers.WebsocketProvider(infuraBaseAddress + infuraKey))
-
-// Singelthon
+const web3 = new Web3(new Web3.providers.WebsocketProvider(infuraBaseAddress + nodeKEy))
 var srnContract = new web3.eth.Contract(srnAbiJson, srnContractAddress);
 var votingContract = new web3.eth.Contract(votingContractAbi, contractAddress);
 
