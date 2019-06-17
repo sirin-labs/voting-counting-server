@@ -25,7 +25,7 @@ var votingContract = new web3.eth.Contract(votingContractAbi, contractAddress);
 
 const start = async function() {
     try {
-        await calcResult(web3)
+        await calcResult()
     } catch(e) {}
 
   // When we get a new vote, we should calc result again, for live version
@@ -34,7 +34,7 @@ const start = async function() {
   console.log(storage.fetchResult())
 }
 
-async function calcResult(web3) {
+async function calcResult() {
     return new Promise(async function(resolve, reject) {
         console.log("====getting all votes====")
         let votes = await getAllVotes(web3)
@@ -61,7 +61,43 @@ async function calcResult(web3) {
             storage.saveResult(formatResult(res))
             resolve()
         } else {
-            reject()
+            reject("no votes")
+        }
+    });
+}
+
+async function calcResultUntilBlock(blockNumber) {
+    return new Promise(async function(resolve, reject) {
+        try {
+            console.log("====getting all votes====")
+            let votes = await getAllVotes(web3, blockNumber)
+
+            console.log("====got "+votes.length+ " votes====")
+            if (votes && votes.length > 0) {
+                console.log("====remove duplicates====")
+                let votingMap = votesToAddressVoteMap(votes)
+                votingMap = removeDuplicates(votingMap, UNIQUE_KEY)
+                console.log("====got "+votingMap.length+ " votes without duplications====")
+                console.log("====fetch balance for each address====")
+                let votersWithBalance = await fetchBalanceForVoters(web3, votingMap, blockNumber)
+                console.log("====calc total balance of voters====")
+                let totalBalanceSum = sumTotalBalanceOfVoters(votersWithBalance)
+                console.log("====calc percent of each vote====")
+                votersWithBalance = calcPercentOfBalance(votersWithBalance, totalBalanceSum);
+                console.log(votersWithBalance);
+                console.log("====count yes and save in var====")
+                let res = votersWithBalance.filter(vote => vote.vote == 1)
+                // create array with only address strength param
+                .map(vote => vote.strength)
+                //sum
+                .reduce((a, b) => a + b)
+                resolve(buildFinalResultObject(res, votersWithBalance))
+            } else {
+                reject("error or no votes at all")
+        }
+    } catch(e) {
+        console.log(e)
+        reject("error calc result")
         }
     });
 }
@@ -79,13 +115,16 @@ function listenToVotes(web3) {
     }, (error, event) => { calcResult(web3) })
 }
 
-async function getAllVotes(web3) {
+async function getAllVotes(web3, blockNumber) {
+    if (!blockNumber) {
+        blockNumber = 'latest'
+    }
     return new Promise(function(resolve, reject) {
         let allEvents = []
         votingContract.getPastEvents(voteYesEventName, {
             filter: {},
             fromBlock: startBlock,
-            toBlock: 'latest'
+            toBlock: blockNumber
         }, (error, events) => { 
             events = events.map(event => {
                 event.vote = 1;
@@ -97,7 +136,7 @@ async function getAllVotes(web3) {
             votingContract.getPastEvents(voteNoEventName, {
                 filter: {},
                 fromBlock: startBlock,
-                toBlock: 'latest'
+                toBlock: blockNumber
             }, (error, events) => { 
                 events.map(event => {
                     event.vote = 0;
@@ -131,22 +170,33 @@ function calcPercentOfBalance(votes, totalBalance) {
     })
 }
 
-function fetchBalanceForVoters(web3, voters) {
+function fetchBalanceForVoters(web3, voters, blockNumber) {
     const promises = voters.map(async vote => {
-        vote.balance = formatBalance(await getSRNBalanceForAddress(web3, vote.address))
+        vote.balance = formatBalance(await getSRNBalanceForAddress(web3, vote.address, blockNumber))
         return vote;
     })
 
     return Promise.all(promises);
 }
 
-function getSRNBalanceForAddress(web3, address) {
-    return srnContract.methods.balanceOf(address).call()
-  }
+function getSRNBalanceForAddress(web3, address, blockNumber) {
+    if (blockNumber) {
+        return srnContract.methods.balanceOf(address).call({}, blockNumber)
+    } else {
+        return srnContract.methods.balanceOf(address).call()
+    }
+}
 
+function buildFinalResultObject(yesPercent, votes) {
+    return {yesPercent:formatResult(yesPercent), votes:votes}
+}
 
 function formatBalance(balance) {
-    return parseInt(balance._hex, 16) / TO_GWEI_FACTOR;
+    if (balance) {
+        return (parseInt(balance._hex, 16) / TO_GWEI_FACTOR);
+    } else {
+        return 0;
+    }
 }
 
 function removeDuplicates(myArr, prop) {
@@ -159,4 +209,7 @@ function formatResult(result) {
     return Math.round(result * 100)
 }
 
-exports.start = start;
+module.exports = {
+    start : start,
+    calcResultUntilBlock : calcResultUntilBlock
+}
